@@ -16,13 +16,44 @@
 #define ASSETS_PATH "./assets"
 #endif
 
-#define V_BUFFER_SIZE 500000
+#define V_BUFFER_SIZE 5000000
 #define V_BUFFER_STACK_THRESHOLD 50000
+
+#define ZOOM_STRENGTH 0.1f
+#define SMOOTH_SPEED 7.0f
+
+struct app_state {
+  float current_zoom;
+  float target_zoom;
+  float current_x;
+  float current_y;
+};
 
 //________________________________________________CALLBACKS__________________________________________________________//
 
 void framebuffer_size_callback(GLFWwindow *window, int width, int height) {
   glViewport(0, 0, width, height);
+}
+
+void scroll_callback(GLFWwindow *window, double xoffset, double yoffset) {
+  struct app_state *state =
+      (struct app_state *)glfwGetWindowUserPointer(window);
+  if (state == NULL)
+    return;
+
+  float multiplier = 1.0f + ((float)yoffset * ZOOM_STRENGTH);
+
+  if (multiplier > 1.5f)
+    multiplier = 1.5f;
+  if (multiplier < 0.5f)
+    multiplier = 0.5f;
+
+  state->target_zoom *= multiplier;
+
+  if (state->target_zoom < 0.05f)
+    state->target_zoom = 0.05f;
+  if (state->target_zoom > 100.0f)
+    state->target_zoom = 100.0f;
 }
 
 void process_input(GLFWwindow *window) {
@@ -32,7 +63,8 @@ void process_input(GLFWwindow *window) {
 
 //_________________________________________________SETUP_____________________________________________________________//
 
-GLFWwindow *initialize_window(int width, int height, const char *title) {
+GLFWwindow *initialize_window(int width, int height, const char *title,
+                              struct app_state *state) {
   if (!glfwInit())
     exit(EXIT_FAILURE);
 
@@ -51,6 +83,9 @@ GLFWwindow *initialize_window(int width, int height, const char *title) {
   }
   glfwMakeContextCurrent(window);
   glfwSetFramebufferSizeCallback(window, framebuffer_size_callback);
+
+  glfwSetWindowUserPointer(window, state);
+  glfwSetScrollCallback(window, scroll_callback);
 
   if (!gladLoadGL((GLADloadfunc)glfwGetProcAddress)) {
     fprintf(stderr, "Failed to initialize GLAD\n");
@@ -90,7 +125,13 @@ GLuint create_shader_program(const char *vertex_path,
 //_________________________________________________MAIN______________________________________________________________//
 
 int main() {
-  GLFWwindow *window = initialize_window(800, 600, "Procedural Circles");
+  struct app_state app_state = {.current_zoom = 1.0f,
+                                .target_zoom = 1.0f,
+                                .current_x = 0.0f,
+                                .current_y = 0.0f};
+
+  GLFWwindow *window =
+      initialize_window(800, 600, "Procedural Circles", &app_state);
 
   // Create Shaders
   GLuint shader_program =
@@ -207,14 +248,37 @@ int main() {
 
   int loc_time = glGetUniformLocation(shader_program, "u_time");
   int loc_aspect = glGetUniformLocation(shader_program, "u_aspect");
-  int vertex_count = mb.offset;
+  int loc_mouse_pos = glGetUniformLocation(shader_program, "u_mouse_pos");
+  int loc_scale = glGetUniformLocation(shader_program, "u_scale");
+
+  int vertex_count = mb.offset / FLOATS_PER_VERTEX;
+
+  double last_time = glfwGetTime();
 
   while (!glfwWindowShouldClose(window)) {
     process_input(window);
 
+    double current_time = glfwGetTime();
+    float delta = (float)(current_time - last_time);
+    last_time = current_time;
+
     int w, h;
     glfwGetFramebufferSize(window, &w, &h);
+
     float aspect = (float)w / (float)h;
+
+    double mouse_x, mouse_y;
+    glfwGetCursorPos(window, &mouse_x, &mouse_y);
+
+    float mouse_norm_x = (float)mouse_x / (w / 2.0f) - 1.0f;
+    float mouse_norm_y = 1.0f - (float)mouse_y / (h / 2.0f);
+
+    app_state.current_zoom = lerp(app_state.current_zoom, app_state.target_zoom,
+                                  SMOOTH_SPEED, delta);
+    app_state.current_x =
+        lerp(app_state.current_x, mouse_norm_x, SMOOTH_SPEED, delta);
+    app_state.current_y =
+        lerp(app_state.current_y, mouse_norm_y, SMOOTH_SPEED, delta);
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
@@ -222,6 +286,8 @@ int main() {
     glUseProgram(shader_program);
     glUniform1f(loc_time, (float)glfwGetTime());
     glUniform1f(loc_aspect, aspect);
+    glUniform2f(loc_mouse_pos, app_state.current_x, app_state.current_y);
+    glUniform1f(loc_scale, app_state.current_zoom);
 
     glBindVertexArray(vao);
     glDrawArrays(GL_TRIANGLES, 0, vertex_count);

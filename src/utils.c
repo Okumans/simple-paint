@@ -1,3 +1,4 @@
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -21,4 +22,8 @@ char *read_file(const char *path) {
   buffer[length] = '\0';
   fclose(f);
   return buffer;
+}
+
+float lerp(float current, float target, float speed, float dt) {
+  return current + (target - current) * (1.0f - exp(-speed * dt));
 }
