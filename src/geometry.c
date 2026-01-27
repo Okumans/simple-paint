@@ -1,16 +1,34 @@
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
 
 #include "geometry.h"
 
-int create_circle(float *buffer, size_t buffer_size,
-                  struct circle_config config) {
+struct mesh_buffer mesh_buffer_new_from_buffer(float *buffer, size_t capacity) {
+  return (struct mesh_buffer){
+      .data = buffer, .capacity = capacity, .offset = 0, .error = 0};
+}
 
-  if (config.definition == 0)
-    return -1;
-  if (config.definition * FLOATS_PER_TRIANGLE > buffer_size)
-    return -1;
+void append_circle(struct mesh_buffer *mb, struct circle_config config) {
+  if (mb->error != CIRCLE_ERR_NONE)
+    return;
 
+  if (config.definition == 0) {
+    mb->error = CIRCLE_ERR_INVALID_DEF;
+    return;
+  }
+
+  size_t need_floats = config.definition * FLOATS_PER_TRIANGLE;
+
+  if (mb->offset + need_floats > mb->capacity) {
+    mb->error = CIRCLE_ERR_BUFFER_OVERFLOW;
+    return;
+  }
+
+  float *buffer = mb->data + mb->offset;
   const double angle_step = (2 * M_PI) / config.definition;
+
+  size_t base_index = 0;
 
   for (size_t i = 0; i < config.definition; ++i) {
     const double degree = i * angle_step;
@@ -32,8 +50,6 @@ int create_circle(float *buffer, size_t buffer_size,
         sin(next_degree + config.color_seed + 2.0f * M_PI / 3.0f) * 0.5f + 0.5f;
     float b_2 =
         sin(next_degree + config.color_seed + 4.0f * M_PI / 3.0f) * 0.5f + 0.5f;
-
-    size_t base_index = i * FLOATS_PER_TRIANGLE;
 
     // 1. First point
     buffer[base_index++] = x_1;
@@ -72,5 +88,5 @@ int create_circle(float *buffer, size_t buffer_size,
     buffer[base_index++] = config.brightness;
   }
 
-  return FLOATS_PER_TRIANGLE * config.definition;
+  mb->offset += need_floats;
 }

@@ -16,7 +16,7 @@
 #define ASSETS_PATH "./assets"
 #endif
 
-#define V_BUFFER_SIZE 503000
+#define V_BUFFER_SIZE 500000
 #define V_BUFFER_STACK_THRESHOLD 50000
 
 //________________________________________________CALLBACKS__________________________________________________________//
@@ -107,32 +107,24 @@ int main() {
   float v_buffer[V_BUFFER_SIZE];
 #endif
 
-  size_t offset = 0;
-  int r;
+  struct mesh_buffer mb = mesh_buffer_new_from_buffer(v_buffer, V_BUFFER_SIZE);
 
   // Main circle
-  r = create_circle(v_buffer + offset, V_BUFFER_SIZE - offset,
-                    (struct circle_config){.center_x = 0.0f,
-                                           .center_y = 0.0f,
-                                           .radius = 0.9f,
-                                           .definition = 8,
-                                           .color_seed = 0,
-                                           .rotate_speed = 0.4f,
-                                           .brightness = 1.0f});
-  if (r > 0)
-    offset += r;
-
+  append_circle(&mb, (struct circle_config){.center_x = 0.0f,
+                                            .center_y = 0.0f,
+                                            .radius = 0.9f,
+                                            .definition = 8,
+                                            .color_seed = 0,
+                                            .rotate_speed = 0.4f,
+                                            .brightness = 1.0f});
   // Secondary circle
-  r = create_circle(v_buffer + offset, V_BUFFER_SIZE - offset,
-                    (struct circle_config){.center_x = 0.0f,
-                                           .center_y = 0.0f,
-                                           .radius = 0.75f,
-                                           .definition = 5,
-                                           .color_seed = 123,
-                                           .rotate_speed = -1.0f,
-                                           .brightness = 0.8f});
-  if (r > 0)
-    offset += r;
+  append_circle(&mb, (struct circle_config){.center_x = 0.0f,
+                                            .center_y = 0.0f,
+                                            .radius = 0.75f,
+                                            .definition = 5,
+                                            .color_seed = 123,
+                                            .rotate_speed = -1.0f,
+                                            .brightness = 0.8f});
 
   // 100 Nested Levels
   const size_t TOTAL_LEVEL = 100;
@@ -152,29 +144,33 @@ int main() {
       float c_x = 0.0f + dist * (float)cos(degree);
       float c_y = 0.0f + dist * (float)sin(degree);
 
-      r = create_circle(
-          v_buffer + offset, V_BUFFER_SIZE - offset,
-          (struct circle_config){.center_x = c_x,
-                                 .center_y = c_y,
-                                 .radius = rad,
-                                 .definition =
-                                     10 * (TOTAL_LEVEL - level) / TOTAL_LEVEL,
-                                 .color_seed = (int)degree,
-                                 .rotate_speed = speed * ((level % 2) ? 1 : -1),
-                                 .brightness = brightness});
-      if (r > 0)
-        offset += r;
+      append_circle(&mb,
+                    (struct circle_config){
+                        .center_x = c_x,
+                        .center_y = c_y,
+                        .radius = rad,
+                        .definition = 10 * (TOTAL_LEVEL - level) / TOTAL_LEVEL,
+                        .color_seed = (int)degree,
+                        .rotate_speed = speed * ((level % 2) ? 1 : -1),
+                        .brightness = brightness});
     }
   }
 
-  // 2. Upload to GPU
+  if (mb.error == CIRCLE_ERR_BUFFER_OVERFLOW) {
+    fprintf(stderr, "Warning: Buffer full! Geometry truncated at %zu floats.\n",
+            mb.offset);
+  } else if (mb.error != CIRCLE_ERR_NONE) {
+    fprintf(stderr, "Error during generation: %d\n", mb.error);
+  }
+
+  // Upload to GPU
   GLuint vao, vbo;
   glGenVertexArrays(1, &vao);
   glGenBuffers(1, &vbo);
 
   glBindVertexArray(vao);
   glBindBuffer(GL_ARRAY_BUFFER, vbo);
-  glBufferData(GL_ARRAY_BUFFER, offset * sizeof(float), v_buffer,
+  glBufferData(GL_ARRAY_BUFFER, mb.offset * sizeof(float), v_buffer,
                GL_STATIC_DRAW);
 
   // Attribute 0: Position (3 floats)
@@ -205,13 +201,13 @@ int main() {
   free(v_buffer);
 #endif
 
-  // 3. Render State
+  // Render State
   glEnable(GL_BLEND);
   glBlendFunc(GL_ONE, GL_ONE);
 
   int loc_time = glGetUniformLocation(shader_program, "u_time");
   int loc_aspect = glGetUniformLocation(shader_program, "u_aspect");
-  int vertex_count = (int)(offset / FLOATS_PER_VERTEX);
+  int vertex_count = mb.offset;
 
   while (!glfwWindowShouldClose(window)) {
     process_input(window);
