@@ -8,8 +8,8 @@
 #include <vector>
 
 PaintApp::PaintApp(GLFWwindow *window)
-    : m_window(window), m_circle_shader(Shader(CIRCLE_VERTEX_SHADER_PATH,
-                                               CIRCLE_FRAGMENT_SHADER_PATH)),
+    : m_window(window), m_stroke_shader(Shader(STROKE_VERTEX_SHADER_PATH,
+                                               STROKE_FRAGMENT_SHADER_PATH)),
       m_projection(1.0f) {
 
   setup_buffers();
@@ -53,17 +53,17 @@ void PaintApp::setup_buffers() {
 }
 
 void PaintApp::render() {
-  m_circle_shader.use();
-  m_circle_shader.setMat4("u_projection", m_projection);
+  m_stroke_shader.use();
+  m_stroke_shader.setMat4("u_projection", m_projection);
 
   glBindVertexArray(m_vao);
 
   for (auto &stroke : m_strokes) {
-    stroke.draw(m_vao, m_circle_shader);
+    stroke.draw(m_vao, m_stroke_shader);
   }
 
   if (!m_current_stroke.is_empty()) {
-    m_current_stroke.draw(m_vao, m_circle_shader);
+    m_current_stroke.draw(m_vao, m_stroke_shader);
   }
 }
 
@@ -107,6 +107,7 @@ void PaintApp::handle_viewport_size(int width, int height) {
 
 void PaintApp::handle_mouse_move(double x, double y) {
   if (m_is_drawing) {
+    input_state.update_pos({x, y});
     on_drawing(x, y);
   }
 }
@@ -114,8 +115,10 @@ void PaintApp::handle_mouse_move(double x, double y) {
 void PaintApp::handle_mouse_click(int button, int action) {
   if (button == GLFW_MOUSE_BUTTON_LEFT) {
     if (action == GLFW_PRESS) {
+      input_state.is_pressed = true;
       start_drawing();
     } else if (action == GLFW_RELEASE) {
+      input_state.is_pressed = true;
       end_drawing();
     }
   }
@@ -148,5 +151,5 @@ void PaintApp::glfw_mouse_button_callback(GLFWwindow *window, int button,
 
 PaintApp::~PaintApp() {
   glDeleteVertexArrays(1, &m_vao);
-  glDeleteProgram(m_circle_shader.ID);
+  glDeleteProgram(m_stroke_shader.ID);
 }

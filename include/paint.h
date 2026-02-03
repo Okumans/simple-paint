@@ -12,14 +12,31 @@
 #define SHADER_PATH ASSETS_PATH "/shaders"
 #endif
 
+struct InputState {
+  glm::vec2 curr_pos;
+  glm::vec2 prev_pos;
+
+  bool is_pressed = false;
+
+  void update_pos(glm::vec2 new_pos) {
+    prev_pos = curr_pos;
+    curr_pos = new_pos;
+  }
+
+  glm::vec2 get_pos(double delta) {
+    // TODO: implement lerp if needed
+    return curr_pos;
+  }
+};
+
 class PaintApp {
 public:
-  const char *CIRCLE_VERTEX_SHADER_PATH = SHADER_PATH "/circle.vert.glsl";
-  const char *CIRCLE_FRAGMENT_SHADER_PATH = SHADER_PATH "/circle.frag.glsl";
+  const char *STROKE_VERTEX_SHADER_PATH = SHADER_PATH "/stroke.vert.glsl";
+  const char *STROKE_FRAGMENT_SHADER_PATH = SHADER_PATH "/stroke.frag.glsl";
 
 private:
   GLFWwindow *m_window;
-  Shader m_circle_shader;
+  Shader m_stroke_shader;
   GLuint m_vao, m_vbo;
   int m_width{0}, m_height{0};
 
@@ -27,8 +44,9 @@ private:
   std::vector<Stroke> m_strokes;
 
   bool m_is_drawing{false};
-
   glm::mat4 m_projection;
+
+  InputState input_state;
 
 public:
   PaintApp(GLFWwindow *window);
