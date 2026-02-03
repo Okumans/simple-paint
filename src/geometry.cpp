@@ -1,5 +1,7 @@
 #include "geometry.h"
 
+#include "glad/gl.h"
+
 void draw_quad() {
   static GLuint quadVAO = 0;
   static GLuint quadVBO = 0;

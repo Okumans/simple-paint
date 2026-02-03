@@ -126,6 +126,5 @@ private:
   void update_projection();
   static glm::vec2 screen_to_world(const AppState &state, double x, double yh);
 
-  void setup_brush_preview();
   void setup_buffers();
 };

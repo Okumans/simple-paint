@@ -60,40 +60,12 @@ PaintApp::PaintApp(GLFWwindow *window)
   }
 }
 
+void setup_brush_preview(GLuint &preview_vao, GLuint preview_vbo);
+void setup_stroke(GLuint &preview_vao);
+
 void PaintApp::setup_buffers() {
-  glCreateVertexArrays(1, &m_stroke_vao);
-
-  // Attribute 0: Position (3 floats)
-  glEnableVertexArrayAttrib(m_stroke_vao, 0);
-  glVertexArrayAttribFormat(m_stroke_vao, 0, 2, GL_FLOAT, GL_FALSE,
-                            offsetof(PointVertex, position));
-  glVertexArrayAttribBinding(m_stroke_vao, 0, 0);
-
-  // Attribute 1: Color (3 floats)
-  glEnableVertexArrayAttrib(m_stroke_vao, 1);
-  glVertexArrayAttribFormat(m_stroke_vao, 1, 3, GL_FLOAT, GL_FALSE,
-                            offsetof(PointVertex, color));
-  glVertexArrayAttribBinding(m_stroke_vao, 1, 0);
-
-  // Attribute 2: UV (2 floats)
-  glEnableVertexArrayAttrib(m_stroke_vao, 2);
-  glVertexArrayAttribFormat(m_stroke_vao, 2, 2, GL_FLOAT, GL_FALSE,
-                            offsetof(PointVertex, uv));
-  glVertexArrayAttribBinding(m_stroke_vao, 2, 0);
-
-  // Attribute 3: Total Stroke Length (1 floats)
-  glEnableVertexArrayAttrib(m_stroke_vao, 3);
-  glVertexArrayAttribFormat(m_stroke_vao, 3, 1, GL_FLOAT, GL_FALSE,
-                            offsetof(PointVertex, thickness));
-  glVertexArrayAttribBinding(m_stroke_vao, 3, 0);
-
-  // Attribute 3: Total Stroke Length (1 floats)
-  glEnableVertexArrayAttrib(m_stroke_vao, 4);
-  glVertexArrayAttribFormat(m_stroke_vao, 4, 1, GL_FLOAT, GL_FALSE,
-                            offsetof(PointVertex, total_stroke_length));
-  glVertexArrayAttribBinding(m_stroke_vao, 4, 0);
-
-  setup_brush_preview();
+  setup_stroke(m_stroke_vao);
+  setup_brush_preview(m_preview_vao, m_preview_vbo);
 }
 
 void PaintApp::render(double delta_time) {
@@ -132,7 +104,7 @@ void PaintApp::render(double delta_time) {
     m_current_stroke.draw(m_stroke_vao, m_stroke_shader);
   }
 
-  if (!m_app_state.is_drawing) {
+  if (true) {
     glm::vec2 world_pos = screen_to_world(m_app_state, m_input_state.curr_pos.x,
                                           m_input_state.curr_pos.y);
 
@@ -360,14 +332,11 @@ glm::vec2 PaintApp::screen_to_world(const AppState &state, double xpos,
   float nx = (2.0f * (float)xpos) / state.window_width - 1.0f;
   float ny = 1.0f - (2.0f * (float)ypos) / state.window_height;
 
-  // 2. World Space Transform
-  // x = (NDC_x * Aspect * Zoom) + Pan_x
-  // y = (NDC_y * Zoom) + Pan_y
-  glm::vec2 world;
-  world.x = (nx * state.get_aspect() * state.zoom) + state.view_pos.x;
-  world.y = (ny * state.zoom) + state.view_pos.y;
+  // Direct inverse transform
+  glm::mat4 invProj = glm::inverse(state.projection);
+  glm::vec4 worldPos = invProj * glm::vec4(nx, ny, 0.0f, 1.0f);
 
-  return world;
+  return glm::vec2(worldPos);
 }
 
 void PaintApp::update_projection() {
@@ -383,11 +352,45 @@ void PaintApp::update_projection() {
   m_app_state.projection = glm::ortho(left, right, bottom, top, -1.0f, 1.0f);
 }
 
-void PaintApp::setup_brush_preview() {
+void setup_stroke(GLuint &stroke_vao) {
+  glCreateVertexArrays(1, &stroke_vao);
+
+  // Attribute 0: Position (3 floats)
+  glEnableVertexArrayAttrib(stroke_vao, 0);
+  glVertexArrayAttribFormat(stroke_vao, 0, 2, GL_FLOAT, GL_FALSE,
+                            offsetof(PointVertex, position));
+  glVertexArrayAttribBinding(stroke_vao, 0, 0);
+
+  // Attribute 1: Color (3 floats)
+  glEnableVertexArrayAttrib(stroke_vao, 1);
+  glVertexArrayAttribFormat(stroke_vao, 1, 3, GL_FLOAT, GL_FALSE,
+                            offsetof(PointVertex, color));
+  glVertexArrayAttribBinding(stroke_vao, 1, 0);
+
+  // Attribute 2: UV (2 floats)
+  glEnableVertexArrayAttrib(stroke_vao, 2);
+  glVertexArrayAttribFormat(stroke_vao, 2, 2, GL_FLOAT, GL_FALSE,
+                            offsetof(PointVertex, uv));
+  glVertexArrayAttribBinding(stroke_vao, 2, 0);
+
+  // Attribute 3: Total Stroke Length (1 floats)
+  glEnableVertexArrayAttrib(stroke_vao, 3);
+  glVertexArrayAttribFormat(stroke_vao, 3, 1, GL_FLOAT, GL_FALSE,
+                            offsetof(PointVertex, thickness));
+  glVertexArrayAttribBinding(stroke_vao, 3, 0);
+
+  // Attribute 3: Total Stroke Length (1 floats)
+  glEnableVertexArrayAttrib(stroke_vao, 4);
+  glVertexArrayAttribFormat(stroke_vao, 4, 1, GL_FLOAT, GL_FALSE,
+                            offsetof(PointVertex, total_stroke_length));
+  glVertexArrayAttribBinding(stroke_vao, 4, 0);
+}
+
+void setup_brush_preview(GLuint &preview_vao, GLuint preview_vbo) {
   // Create a simple circle with 32 segments
   std::vector<float> vertices;
-  vertices.push_back(0.0f); // Center X
-  vertices.push_back(0.0f); // Center Y
+  vertices.push_back(0.0f);
+  vertices.push_back(0.0f);
 
   int segments = 32;
   for (int i = 0; i <= segments; ++i) {
@@ -396,17 +399,16 @@ void PaintApp::setup_brush_preview() {
     vertices.push_back(sin(angle));
   }
 
-  glCreateVertexArrays(1, &m_preview_vao);
-  glCreateBuffers(1, &m_preview_vbo);
+  glCreateVertexArrays(1, &preview_vao);
+  glCreateBuffers(1, &preview_vbo);
 
-  glNamedBufferStorage(m_preview_vbo, vertices.size() * sizeof(float),
+  glNamedBufferStorage(preview_vbo, vertices.size() * sizeof(float),
                        vertices.data(), 0);
 
-  glVertexArrayVertexBuffer(m_preview_vao, 0, m_preview_vbo, 0,
-                            2 * sizeof(float));
-  glEnableVertexArrayAttrib(m_preview_vao, 0);
-  glVertexArrayAttribFormat(m_preview_vao, 0, 2, GL_FLOAT, GL_FALSE, 0);
-  glVertexArrayAttribBinding(m_preview_vao, 0, 0);
+  glVertexArrayVertexBuffer(preview_vao, 0, preview_vbo, 0, 2 * sizeof(float));
+  glEnableVertexArrayAttrib(preview_vao, 0);
+  glVertexArrayAttribFormat(preview_vao, 0, 2, GL_FLOAT, GL_FALSE, 0);
+  glVertexArrayAttribBinding(preview_vao, 0, 0);
 }
 
 // GLFW adapter handlers
