@@ -1,20 +1,30 @@
-#version 330 core
-#define TWO_PI 6.28318530718
+#version 450 core
 
-in vec3 initialColor;
-in float brightness;
-out vec4 FragColor;
-uniform float u_time;
+layout(location = 0) out vec4 FinalColor;
 
-void main()
-{
-  float intensity = length(initialColor) / 1.732;
-  float glow = pow(intensity, 2.0);
-  float red = brightness * (sin(u_time + initialColor.r * TWO_PI) *
-        0.5 + 0.5);
-  float green = brightness * (sin(u_time + initialColor.g * TWO_PI) *
-        0.5 + 0.5);
-  float blue = brightness * (cos(u_time + initialColor.b * TWO_PI) *
-        0.5 + 0.5);
-  FragColor = vec4(red * glow, green * glow, blue * glow, 1.0);
+in vec3 FragColor;
+in vec2 TexCoords;
+in float vTotalLength;
+
+uniform float u_thickness;
+
+void main() {
+  float radius = u_thickness * 0.5;
+
+  float dx = (TexCoords.x - 0.5) * u_thickness;
+
+  float dy = 0.0;
+  if (TexCoords.y < 0.0) {
+    dy = TexCoords.y;
+  } else if (TexCoords.y > vTotalLength) {
+    dy = TexCoords.y - vTotalLength;
+  }
+
+  float dist = sqrt(dx * dx + dy * dy);
+
+  float alpha = 1.0 - smoothstep(radius - fwidth(dist), radius, dist);
+
+  if (alpha <= 0.0) discard;
+
+  FinalColor = vec4(FragColor, alpha);
 }

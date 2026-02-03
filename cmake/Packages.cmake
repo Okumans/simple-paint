@@ -34,13 +34,17 @@ install(TARGETS ${GLAD_LIBRARY}
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib)
 
+
 CPMAddPackage(
   NAME glm
   GITHUB_REPOSITORY g-truc/glm
-  GIT_TAG 1.0.1
+  GIT_TAG 0.9.9.8
 )
-find_targets(glm_targets ${glm_SOURCE_DIR})
-make_folder("glm" ${glm_targets})
+
+if(glm_ADDED)
+  make_folder("glm" glm)
+endif()
+
 
 # To fix build errors in Qt Creator for the latest versions of CMake.
 set(CMP0169 OLD)

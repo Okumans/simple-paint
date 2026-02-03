@@ -9,16 +9,22 @@ file(COPY ${ASSETS_DIR} DESTINATION ${CMAKE_BINARY_DIR})
 #-----------------------------------------------------------------------------#
 # list of all source files
 set(SRC_DIR ${PROJECT_SOURCE_DIR}/src)
-file(GLOB_RECURSE HEADER_FILES CONFIGURE_DEPENDS "${SRC_DIR}/*.h")
-file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS "${SRC_DIR}/*.c")
+set(INC_DIR ${PROJECT_SOURCE_DIR}/include)
+file(GLOB_RECURSE SRC_HEADER_FILES CONFIGURE_DEPENDS "${SRC_DIR}/*.h")
+file(GLOB_RECURSE INC_HEADER_FILES CONFIGURE_DEPENDS "${INC_DIR}/*.h")
+file(GLOB_RECURSE SOURCE_FILES CONFIGURE_DEPENDS "${SRC_DIR}/*.cpp")
 file(GLOB_RECURSE SHADER_FILES CONFIGURE_DEPENDS "${ASSETS_DIR}/shaders/*.glsl")
+set(ALL_HEADERS ${SRC_HEADERS} ${INC_HEADERS})
 
 #-----------------------------------------------------------------------------#
 # list all files that will either be used for compilation or that should show
 # up in the ide of your choice
-add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${HEADER_FILES} ${SHADER_FILES})
+add_executable(${PROJECT_NAME} ${SOURCE_FILES} ${ALL_HEADERS} ${SHADER_FILES})
 GroupSourcesByFolder(${PROJECT_NAME})
-target_include_directories(${PROJECT_NAME} PUBLIC src)
+target_include_directories(${PROJECT_NAME} PRIVATE
+    ${SRC_DIR}
+    ${INC_DIR}
+)
 set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 11) # use c++11
 
 file(RELATIVE_PATH
@@ -38,6 +44,7 @@ target_link_libraries(${CMAKE_PROJECT_NAME}
   PRIVATE
   glfw
   ${GLAD_LIBRARY}
+  m
   glm)
 
 install(TARGETS ${CMAKE_PROJECT_NAME}
