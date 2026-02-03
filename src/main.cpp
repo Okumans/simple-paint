@@ -56,13 +56,19 @@ int main() {
   GLFWwindow *window = initialize_window(800, 600, "Simple Paint");
   PaintApp app(window);
 
+  double prev_time = glfwGetTime();
+
   while (!glfwWindowShouldClose(window)) {
+    double curr_time = glfwGetTime();
+    double delta_time = curr_time - prev_time;
+    prev_time = curr_time;
+
     process_input(window);
 
     glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
     glClear(GL_COLOR_BUFFER_BIT);
 
-    app.render();
+    app.render(delta_time);
 
     glfwSwapBuffers(window);
     glfwPollEvents();
