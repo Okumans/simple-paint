@@ -1,5 +1,6 @@
 #pragma once
 
+#include "glad/gl.h"
 #include <glm/glm.hpp>
 
 struct PointVertex {
@@ -9,3 +10,10 @@ struct PointVertex {
   float thickness;
   float total_stroke_length;
 };
+
+struct QuadVertex {
+  glm::vec2 pos;
+  glm::vec2 uv;
+};
+
+void draw_quad();

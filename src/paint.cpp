@@ -1,5 +1,6 @@
 #include "paint.h"
 #include "GLFW/glfw3.h"
+#include "geometry.h"
 #include "glad/gl.h"
 #include "shader.h"
 #include "stroke.h"
@@ -12,7 +13,9 @@
 PaintApp::PaintApp(GLFWwindow *window)
     : m_window(window), m_stroke_shader(Shader(STROKE_VERTEX_SHADER_PATH,
                                                STROKE_FRAGMENT_SHADER_PATH)),
-      m_ui_shader(Shader(UI_VERTEX_SHADER_PATH, UI_FRAGMENT_SHADER_PATH)) {
+      m_ui_shader(Shader(UI_VERTEX_SHADER_PATH, UI_FRAGMENT_SHADER_PATH)),
+      m_grid_shader(
+          Shader(GRID_VERTEX_SHADER_PATH, GRID_FRAGMENT_SHADER_PATH)) {
   setup_buffers();
 
   glfwSetWindowUserPointer(m_window, (void *)this);
@@ -97,10 +100,29 @@ void PaintApp::render(double delta_time) {
   process_input();
   update_camera(delta_time);
 
-  glBindVertexArray(m_stroke_vao);
+  m_grid_shader.use();
+  m_grid_shader.setMat4("u_projection", m_app_state.projection);
+
+  // Create a model matrix that covers the current visible world area
+  float aspect = m_app_state.get_aspect();
+  float z = m_app_state.zoom;
+
+  glm::mat4 gridModel = glm::mat4(1.0f);
+  gridModel = glm::translate(gridModel, glm::vec3(m_app_state.view_pos, -0.9f));
+  gridModel =
+      glm::scale(gridModel, glm::vec3(aspect * z * 2.0f, z * 2.0f, 1.0f));
+  // Center the quad
+  gridModel = glm::translate(gridModel, glm::vec3(-0.5f, -0.5f, 0.0f));
+
+  m_grid_shader.setMat4("u_model", gridModel);
+  m_grid_shader.setFloat("u_zoom", m_app_state.zoom);
+
+  draw_quad(); // Reuse your UI quad helper
 
   m_stroke_shader.use();
   m_stroke_shader.setMat4("u_projection", m_app_state.projection);
+
+  glBindVertexArray(m_stroke_vao);
 
   for (auto &stroke : m_strokes) {
     stroke.draw(m_stroke_vao, m_stroke_shader);

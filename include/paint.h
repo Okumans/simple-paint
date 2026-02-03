@@ -61,6 +61,8 @@ public:
   const char *STROKE_FRAGMENT_SHADER_PATH = SHADER_PATH "/stroke.frag.glsl";
   const char *UI_VERTEX_SHADER_PATH = SHADER_PATH "/ui.vert.glsl";
   const char *UI_FRAGMENT_SHADER_PATH = SHADER_PATH "/ui.frag.glsl";
+  const char *GRID_VERTEX_SHADER_PATH = SHADER_PATH "/grid.vert.glsl";
+  const char *GRID_FRAGMENT_SHADER_PATH = SHADER_PATH "/grid.frag.glsl";
 
 private:
   const int PREVIEW_SEGMENTS = 64;
@@ -69,9 +71,11 @@ private:
 
   Shader m_stroke_shader;
   Shader m_ui_shader;
+  Shader m_grid_shader;
 
   GLuint m_stroke_vao;
   GLuint m_preview_vao, m_preview_vbo;
+  GLuint m_grid_vao, m_grid_vbo;
 
   UIManager m_ui_manager;
 
