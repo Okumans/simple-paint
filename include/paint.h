@@ -1,13 +1,13 @@
 #pragma once
 
-#include "glad/gl.h"
+#include <glad/gl.h>
 
-#include "GLFW/glfw3.h"
-#include "glm/ext/vector_float2.hpp"
-#include "glm/fwd.hpp"
 #include "shader.h"
 #include "stroke.h"
-#include <stack>
+#include "ui_manager.h"
+#include <GLFW/glfw3.h>
+#include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
 #include <vector>
 
 #ifndef SHADER_PATH
@@ -38,7 +38,7 @@ struct AppState {
 
   // --- Tool State ---
   glm::vec3 current_color = {1.0f, 1.0f, 1.0f};
-  float current_thickness = 0.05f;
+  float current_thickness = 0.01f;
 
   // --- Interaction State ---
   bool is_drawing = false;
@@ -47,6 +47,8 @@ struct AppState {
   // --- Viewport ---
   int window_width = 800;
   int window_height = 600;
+
+  glm::mat4 projection = glm::identity<glm::mat4>();
 
   float get_aspect() const {
     return static_cast<float>(window_width) / static_cast<float>(window_height);
@@ -57,17 +59,25 @@ class PaintApp {
 public:
   const char *STROKE_VERTEX_SHADER_PATH = SHADER_PATH "/stroke.vert.glsl";
   const char *STROKE_FRAGMENT_SHADER_PATH = SHADER_PATH "/stroke.frag.glsl";
+  const char *UI_VERTEX_SHADER_PATH = SHADER_PATH "/ui.vert.glsl";
+  const char *UI_FRAGMENT_SHADER_PATH = SHADER_PATH "/ui.frag.glsl";
 
 private:
+  const int PREVIEW_SEGMENTS = 64;
+
   GLFWwindow *m_window;
+
   Shader m_stroke_shader;
-  GLuint m_vao, m_vbo;
+  Shader m_ui_shader;
+
+  GLuint m_stroke_vao;
+  GLuint m_preview_vao, m_preview_vbo;
+
+  UIManager m_ui_manager;
 
   Stroke m_current_stroke;
   std::vector<Stroke> m_strokes;
   std::vector<Stroke> m_strokes_revert; // for <C-R>
-
-  glm::mat4 m_projection;
 
   InputState m_input_state;
   AppState m_app_state;
@@ -105,9 +115,13 @@ private:
   void end_drawing();
 
   // Helper method
+  void set_color(glm::vec3 color);
+  void set_thickness(float thickness);
+
   void update_camera(double delta_time);
   void update_projection();
   static glm::vec2 screen_to_world(const AppState &state, double x, double yh);
 
+  void setup_brush_preview();
   void setup_buffers();
 };

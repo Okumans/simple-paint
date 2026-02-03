@@ -3,10 +3,12 @@
 layout(location = 0) in vec2 aPos;
 layout(location = 1) in vec3 aColor;
 layout(location = 2) in vec2 aUv;
-layout(location = 3) in float aTotalLength;
+layout(location = 3) in float aThickness;
+layout(location = 4) in float aTotalLength;
 
 out vec3 FragColor;
 out vec2 TexCoords;
+out float vThickness;
 out float vTotalLength;
 
 uniform mat4 u_projection;
@@ -19,6 +21,8 @@ void main() {
   FragColor = aColor;
 
   TexCoords = aUv;
+
+  vThickness = aThickness;
 
   vTotalLength = aTotalLength;
 }

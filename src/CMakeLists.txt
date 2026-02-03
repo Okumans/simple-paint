@@ -25,7 +25,7 @@ target_include_directories(${PROJECT_NAME} PRIVATE
     ${SRC_DIR}
     ${INC_DIR}
 )
-set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 11) # use c++11
+set_target_properties(${PROJECT_NAME} PROPERTIES CXX_STANDARD 23) # use c++11
 
 file(RELATIVE_PATH
   ASSETS_LOCATION

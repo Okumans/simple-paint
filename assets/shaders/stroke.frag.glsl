@@ -4,14 +4,15 @@ layout(location = 0) out vec4 FinalColor;
 
 in vec3 FragColor;
 in vec2 TexCoords;
+in float vThickness;
 in float vTotalLength;
 
-uniform float u_thickness;
+uniform float u_alpha = 1.0;
 
 void main() {
-  float radius = u_thickness * 0.5;
+  float radius = vThickness * 0.5;
 
-  float dx = (TexCoords.x - 0.5) * u_thickness;
+  float dx = (TexCoords.x - 0.5) * vThickness;
 
   float dy = 0.0;
   if (TexCoords.y < 0.0) {
@@ -26,5 +27,5 @@ void main() {
 
   if (alpha <= 0.0) discard;
 
-  FinalColor = vec4(FragColor, alpha);
+  FinalColor = vec4(FragColor, alpha * u_alpha);
 }

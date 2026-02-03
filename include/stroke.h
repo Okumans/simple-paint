@@ -18,6 +18,7 @@ private:
 
 public:
   Stroke();
+  Stroke(glm::vec3 color, double thickness);
   ~Stroke();
 
   // Disable Copying (prevents double-free of VBO)
@@ -32,6 +33,8 @@ public:
   void draw(GLuint vao, const Shader &shader) const override;
   void update_geometry() override;
 
+  void set_color(glm::vec3 color);
+  void set_thickness(double thickness);
   void add_point(float x, float y);
   void clear();
   bool is_empty() const;

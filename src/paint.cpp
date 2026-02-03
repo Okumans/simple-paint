@@ -2,6 +2,8 @@
 #include "GLFW/glfw3.h"
 #include "glad/gl.h"
 #include "shader.h"
+#include "stroke.h"
+#include "ui_manager.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/matrix.hpp>
@@ -10,8 +12,7 @@
 PaintApp::PaintApp(GLFWwindow *window)
     : m_window(window), m_stroke_shader(Shader(STROKE_VERTEX_SHADER_PATH,
                                                STROKE_FRAGMENT_SHADER_PATH)),
-      m_projection(1.0f) {
-
+      m_ui_shader(Shader(UI_VERTEX_SHADER_PATH, UI_FRAGMENT_SHADER_PATH)) {
   setup_buffers();
 
   glfwSetWindowUserPointer(m_window, (void *)this);
@@ -24,52 +25,115 @@ PaintApp::PaintApp(GLFWwindow *window)
 
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+
+  // Set up color picker
+  {
+    const float BOX_SIZE = 40.0f;
+    const float PADDING = 2.0f;
+    const float START_X = 10.0f;
+    const float START_Y = 10.0f;
+
+    std::vector<glm::vec3> palette = {
+        {1.0f, 0.0f, 0.0f}, {0.0f, 1.0f, 0.0f}, {0.0f, 0.0f, 1.0f},
+        {1.0f, 1.0f, 1.0f}, {1.0f, 1.0f, 0.0f}, {1.0f, 0.0f, 1.0f},
+        {0.0f, 1.0f, 1.0f}, {0.5f, 0.5f, 0.5f}, {0.5f, 0.0f, 0.0f},
+        {0.0f, 0.5f, 0.0f}, {0.0f, 0.0f, 0.5f}, {0.0f, 0.0f, 0.0f},
+        {1.0f, 0.5f, 0.0f}, {0.5f, 1.0f, 0.0f}, {0.5f, 0.0f, 1.0f},
+        {0.0f, 0.5f, 1.0f}};
+
+    for (int i = 0; i < palette.size(); ++i) {
+      int row = i / 8;
+      int col = i % 8;
+
+      float x = START_X + col * (BOX_SIZE + PADDING);
+      float y = START_Y + row * (BOX_SIZE + PADDING);
+
+      glm::vec3 color = palette[i];
+      std::string name = "Color_" + std::to_string(i);
+
+      m_ui_manager.add_element(name, {x, y, BOX_SIZE, BOX_SIZE}, color,
+                               [this, color]() { this->set_color(color); });
+    }
+  }
 }
 
 void PaintApp::setup_buffers() {
-  glCreateVertexArrays(1, &m_vao);
+  glCreateVertexArrays(1, &m_stroke_vao);
 
   // Attribute 0: Position (3 floats)
-  glEnableVertexArrayAttrib(m_vao, 0);
-  glVertexArrayAttribFormat(m_vao, 0, 2, GL_FLOAT, GL_FALSE,
+  glEnableVertexArrayAttrib(m_stroke_vao, 0);
+  glVertexArrayAttribFormat(m_stroke_vao, 0, 2, GL_FLOAT, GL_FALSE,
                             offsetof(PointVertex, position));
-  glVertexArrayAttribBinding(m_vao, 0, 0);
+  glVertexArrayAttribBinding(m_stroke_vao, 0, 0);
 
   // Attribute 1: Color (3 floats)
-  glEnableVertexArrayAttrib(m_vao, 1);
-  glVertexArrayAttribFormat(m_vao, 1, 3, GL_FLOAT, GL_FALSE,
+  glEnableVertexArrayAttrib(m_stroke_vao, 1);
+  glVertexArrayAttribFormat(m_stroke_vao, 1, 3, GL_FLOAT, GL_FALSE,
                             offsetof(PointVertex, color));
-  glVertexArrayAttribBinding(m_vao, 1, 0);
+  glVertexArrayAttribBinding(m_stroke_vao, 1, 0);
 
   // Attribute 2: UV (2 floats)
-  glEnableVertexArrayAttrib(m_vao, 2);
-  glVertexArrayAttribFormat(m_vao, 2, 2, GL_FLOAT, GL_FALSE,
+  glEnableVertexArrayAttrib(m_stroke_vao, 2);
+  glVertexArrayAttribFormat(m_stroke_vao, 2, 2, GL_FLOAT, GL_FALSE,
                             offsetof(PointVertex, uv));
-  glVertexArrayAttribBinding(m_vao, 2, 0);
+  glVertexArrayAttribBinding(m_stroke_vao, 2, 0);
 
   // Attribute 3: Total Stroke Length (1 floats)
-  glEnableVertexArrayAttrib(m_vao, 3);
-  glVertexArrayAttribFormat(m_vao, 3, 1, GL_FLOAT, GL_FALSE,
+  glEnableVertexArrayAttrib(m_stroke_vao, 3);
+  glVertexArrayAttribFormat(m_stroke_vao, 3, 1, GL_FLOAT, GL_FALSE,
+                            offsetof(PointVertex, thickness));
+  glVertexArrayAttribBinding(m_stroke_vao, 3, 0);
+
+  // Attribute 3: Total Stroke Length (1 floats)
+  glEnableVertexArrayAttrib(m_stroke_vao, 4);
+  glVertexArrayAttribFormat(m_stroke_vao, 4, 1, GL_FLOAT, GL_FALSE,
                             offsetof(PointVertex, total_stroke_length));
-  glVertexArrayAttribBinding(m_vao, 3, 0);
+  glVertexArrayAttribBinding(m_stroke_vao, 4, 0);
+
+  setup_brush_preview();
 }
 
 void PaintApp::render(double delta_time) {
   process_input();
   update_camera(delta_time);
 
-  m_stroke_shader.use();
-  m_stroke_shader.setMat4("u_projection", m_projection);
+  glBindVertexArray(m_stroke_vao);
 
-  glBindVertexArray(m_vao);
+  m_stroke_shader.use();
+  m_stroke_shader.setMat4("u_projection", m_app_state.projection);
 
   for (auto &stroke : m_strokes) {
-    stroke.draw(m_vao, m_stroke_shader);
+    stroke.draw(m_stroke_vao, m_stroke_shader);
   }
 
   if (!m_current_stroke.is_empty()) {
-    m_current_stroke.draw(m_vao, m_stroke_shader);
+    m_current_stroke.draw(m_stroke_vao, m_stroke_shader);
   }
+
+  if (!m_app_state.is_drawing) {
+    glm::vec2 world_pos = screen_to_world(m_app_state, m_input_state.curr_pos.x,
+                                          m_input_state.curr_pos.y);
+
+    m_ui_shader.use();
+    m_ui_shader.setMat4("u_projection", m_app_state.projection);
+
+    // Transformation Matrix: Translate to mouse -> Scale to brush radius
+    glm::mat4 model = glm::mat4(1.0f);
+    model = glm::translate(model, glm::vec3(world_pos, 0.0f));
+    float radius = m_app_state.current_thickness * 0.5f;
+    model = glm::scale(model, glm::vec3(radius, radius, 1.0f));
+
+    m_ui_shader.setMat4("u_model", model);
+    m_ui_shader.setVec3("u_color", m_app_state.current_color);
+    m_ui_shader.setBool("u_hasTexture", false);
+    m_ui_shader.setFloat("u_alpha", 0.4f);
+
+    glBindVertexArray(m_preview_vao);
+    glDrawArrays(GL_TRIANGLE_FAN, 0, PREVIEW_SEGMENTS + 2);
+  }
+
+  m_ui_manager.render(m_ui_shader, m_app_state.window_width,
+                      m_app_state.window_height);
 }
 
 void PaintApp::start_drawing() {
@@ -90,12 +154,12 @@ void PaintApp::end_drawing() {
     m_current_stroke.update_geometry();
     m_current_stroke.upload();
     m_strokes.push_back(std::move(m_current_stroke));
-    m_current_stroke = Stroke();
+    m_current_stroke =
+        Stroke(m_app_state.current_color, m_app_state.current_thickness);
   }
 }
 
 // Paint app internal handlers
-//
 void PaintApp::update_camera(double deltaTime) {
   // 1. Smoothly interpolate Zoom
   // Formula: current = current + (target - current) * speed * dt
@@ -125,10 +189,9 @@ void PaintApp::handle_scroll(double xoffset, double yoffset) {
     double x, y;
     glfwGetCursorPos(m_window, &x, &y);
 
-    // 1. Where is the mouse in the world right now?
     glm::vec2 mouse_world_before = screen_to_world(m_app_state, x, y);
 
-    // 2. Set new zoom target
+    // Set new zoom target
     if (yoffset > 0)
       m_app_state.target_zoom *= 0.9f;
     else
@@ -136,7 +199,7 @@ void PaintApp::handle_scroll(double xoffset, double yoffset) {
     m_app_state.target_zoom =
         glm::clamp(m_app_state.target_zoom, 0.01f, 100.0f);
 
-    // 3. To keep the mouse "anchored" to the same world spot:
+    // To keep the mouse "anchored" to the same world spot:
     // We calculate what the world position would be at the TARGET zoom
     // and adjust the target_view_pos to compensate.
     float nx = (2.0f * (float)x) / m_app_state.window_width - 1.0f;
@@ -179,10 +242,23 @@ void PaintApp::handle_key_event(int key, int action, int mods) {
         m_strokes_revert.pop_back();
       }
     }
+
+    if ((ctrl_down && key == GLFW_KEY_EQUAL)) {
+      set_thickness(m_app_state.current_thickness * 1.2f);
+    }
+
+    if (ctrl_down && key == GLFW_KEY_MINUS) {
+      set_thickness(m_app_state.current_thickness * 0.8f);
+    }
   }
 }
 
 void PaintApp::handle_mouse_click(int button, int action) {
+  if (m_ui_manager.handle_click(m_input_state.curr_pos.x,
+                                m_input_state.curr_pos.y)) {
+    m_input_state.is_pressed = true;
+    return;
+  }
   // IGNORE UI MANAGER FOR NOW
 
   if (button == GLFW_MOUSE_BUTTON_LEFT) {
@@ -215,7 +291,8 @@ void PaintApp::process_input() {
   if (is_panning_chord || is_space_panning) {
     // Safety: Cancel stroke if we start panning while drawing
     if (m_app_state.is_drawing) {
-      m_current_stroke = Stroke();
+      m_current_stroke =
+          Stroke(m_app_state.current_color, m_app_state.current_thickness);
       m_app_state.is_drawing = false;
     }
 
@@ -245,6 +322,17 @@ void PaintApp::handle_mouse_move(double x, double y) {
 }
 
 // Helper methods
+
+void PaintApp::set_color(glm::vec3 color) {
+  m_app_state.current_color = color;
+  m_current_stroke.set_color(color);
+}
+
+void PaintApp::set_thickness(float thickness) {
+  m_app_state.current_thickness = thickness;
+  m_current_stroke.set_thickness(thickness);
+}
+
 glm::vec2 PaintApp::screen_to_world(const AppState &state, double xpos,
                                     double ypos) {
   float nx = (2.0f * (float)xpos) / state.window_width - 1.0f;
@@ -270,7 +358,33 @@ void PaintApp::update_projection() {
   float bottom = m_app_state.view_pos.y - z;
   float top = m_app_state.view_pos.y + z;
 
-  m_projection = glm::ortho(left, right, bottom, top, -1.0f, 1.0f);
+  m_app_state.projection = glm::ortho(left, right, bottom, top, -1.0f, 1.0f);
+}
+
+void PaintApp::setup_brush_preview() {
+  // Create a simple circle with 32 segments
+  std::vector<float> vertices;
+  vertices.push_back(0.0f); // Center X
+  vertices.push_back(0.0f); // Center Y
+
+  int segments = 32;
+  for (int i = 0; i <= segments; ++i) {
+    float angle = i * 2.0f * glm::pi<float>() / segments;
+    vertices.push_back(cos(angle));
+    vertices.push_back(sin(angle));
+  }
+
+  glCreateVertexArrays(1, &m_preview_vao);
+  glCreateBuffers(1, &m_preview_vbo);
+
+  glNamedBufferStorage(m_preview_vbo, vertices.size() * sizeof(float),
+                       vertices.data(), 0);
+
+  glVertexArrayVertexBuffer(m_preview_vao, 0, m_preview_vbo, 0,
+                            2 * sizeof(float));
+  glEnableVertexArrayAttrib(m_preview_vao, 0);
+  glVertexArrayAttribFormat(m_preview_vao, 0, 2, GL_FLOAT, GL_FALSE, 0);
+  glVertexArrayAttribBinding(m_preview_vao, 0, 0);
 }
 
 // GLFW adapter handlers
@@ -313,6 +427,6 @@ void PaintApp::glfw_mouse_button_callback(GLFWwindow *window, int button,
 }
 
 PaintApp::~PaintApp() {
-  glDeleteVertexArrays(1, &m_vao);
+  glDeleteVertexArrays(1, &m_stroke_vao);
   glDeleteProgram(m_stroke_shader.ID);
 }

@@ -10,8 +10,15 @@
 
 Stroke::Stroke()
     : m_vbo(0), m_color(1.0f), m_thickness(0.01), m_cummulative_distance(0.0) {
-  m_raw_points.reserve(1000);
-  m_render_vertices.reserve(1000);
+  m_raw_points.reserve(100);
+  m_render_vertices.reserve(100);
+}
+
+Stroke::Stroke(glm::vec3 color, double thickness)
+    : m_vbo(0), m_color(color), m_thickness(thickness),
+      m_cummulative_distance(0.0) {
+  m_raw_points.reserve(100);
+  m_render_vertices.reserve(100);
 }
 
 Stroke::~Stroke() {
@@ -74,11 +81,15 @@ void Stroke::add_point(float x, float y) {
     glm::vec2 start_left = prev_point + (normal * w);
     glm::vec2 start_right = prev_point - (normal * w);
 
-    m_render_vertices.push_back(
-        {{start_left.x, start_left.y}, {1.0f, 1.0f, 1.0f}, {0.0f, 0.0f}, 0.0f});
+    m_render_vertices.push_back({{start_left.x, start_left.y},
+                                 m_color,
+                                 {0.0f, 0.0f},
+                                 static_cast<float>(m_thickness),
+                                 0.0f});
     m_render_vertices.push_back({{start_right.x, start_right.y},
-                                 {1.0f, 1.0f, 1.0f},
+                                 m_color,
                                  {1.0f, 0.0f},
+                                 static_cast<float>(m_thickness),
                                  0.0f});
   }
 
@@ -87,13 +98,20 @@ void Stroke::add_point(float x, float y) {
   glm::vec2 end_right = curr_point - (normal * w);
 
   m_render_vertices.push_back({{end_left.x, end_left.y},
-                               {1.0f, 1.0f, 1.0f},
+                               m_color,
                                {0.0f, m_cummulative_distance},
+                               static_cast<float>(m_thickness),
                                static_cast<float>(m_cummulative_distance)});
   m_render_vertices.push_back({{end_right.x, end_right.y},
-                               {1.0f, 1.0f, 1.0f},
+                               m_color,
                                {1.0f, m_cummulative_distance},
+                               static_cast<float>(m_thickness),
                                static_cast<float>(m_cummulative_distance)});
+}
+
+void Stroke::clear() {
+  m_raw_points.clear();
+  m_render_vertices.clear();
 }
 
 void Stroke::update_geometry() {
@@ -138,10 +156,16 @@ void Stroke::update_geometry() {
 
       // Extension for Rounded Cap
       glm::vec2 cap_origin = curr - (t * radius);
-      m_render_vertices.push_back(
-          {cap_origin + miter_normal * radius, m_color, {0.0f, -radius}, 0.0f});
-      m_render_vertices.push_back(
-          {cap_origin - miter_normal * radius, m_color, {1.0f, -radius}, 0.0f});
+      m_render_vertices.push_back({cap_origin + miter_normal * radius,
+                                   m_color,
+                                   {0.0f, -radius},
+                                   static_cast<float>(m_thickness),
+                                   0.0f});
+      m_render_vertices.push_back({cap_origin - miter_normal * radius,
+                                   m_color,
+                                   {1.0f, -radius},
+                                   static_cast<float>(m_thickness),
+                                   0.0f});
     } else if (i == smooth_points.size() - 1) {
       glm::vec2 prev = smooth_points[i - 1];
       running_v += glm::distance(curr, prev);
@@ -153,10 +177,12 @@ void Stroke::update_geometry() {
       m_render_vertices.push_back({cap_origin + miter_normal * radius,
                                    m_color,
                                    {0.0f, running_v + radius},
+                                   static_cast<float>(m_thickness),
                                    0.0f});
       m_render_vertices.push_back({cap_origin - miter_normal * radius,
                                    m_color,
                                    {1.0f, running_v + radius},
+                                   static_cast<float>(m_thickness),
                                    0.0f});
     } else {
       glm::vec2 prev = smooth_points[i - 1];
@@ -174,10 +200,16 @@ void Stroke::update_geometry() {
       if (length > miter_limit)
         length = miter_limit;
 
-      m_render_vertices.push_back(
-          {curr + miter_normal * length, m_color, {0.0f, running_v}, 0.0f});
-      m_render_vertices.push_back(
-          {curr - miter_normal * length, m_color, {1.0f, running_v}, 0.0f});
+      m_render_vertices.push_back({curr + miter_normal * length,
+                                   m_color,
+                                   {0.0f, running_v},
+                                   static_cast<float>(m_thickness),
+                                   0.0f});
+      m_render_vertices.push_back({curr - miter_normal * length,
+                                   m_color,
+                                   {1.0f, running_v},
+                                   static_cast<float>(m_thickness),
+                                   0.0f});
     }
   }
 
@@ -185,6 +217,18 @@ void Stroke::update_geometry() {
   m_cummulative_distance = running_v;
   for (auto &v : m_render_vertices) {
     v.total_stroke_length = m_cummulative_distance;
+  }
+}
+
+void Stroke::set_color(glm::vec3 color) {
+  m_color = color;
+  std::cout << m_color.r << "," << m_color.g << "," << m_color.b << "\n";
+}
+void Stroke::set_thickness(double thickness) {
+  m_thickness = thickness;
+
+  for (PointVertex &point : m_render_vertices) {
+    point.thickness = thickness;
   }
 }
 
@@ -202,10 +246,6 @@ void Stroke::upload() {
 
 void Stroke::draw(GLuint vao, const Shader &shader) const {
   glVertexArrayVertexBuffer(vao, 0, m_vbo, 0, sizeof(PointVertex));
-
-  shader.setVec3("u_color", m_color);
-  shader.setFloat("u_thickness", m_thickness);
-
   glDrawArrays(GL_TRIANGLE_STRIP, 0, (GLsizei)m_render_vertices.size());
 }
 
