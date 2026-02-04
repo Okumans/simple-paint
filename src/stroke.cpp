@@ -57,7 +57,7 @@ void Stroke::add_point(float x, float y) {
 
   // Safety: If the mouse didn't move, don't waste memory
   if (!m_raw_points.empty()) {
-    if (glm::distance(curr_point, m_raw_points.back()) < 0.0001f)
+    if (glm::distance(curr_point, m_raw_points.back()) < (m_thickness / 10))
       return;
   }
 
@@ -230,6 +230,10 @@ void Stroke::set_thickness(double thickness) {
   for (PointVertex &point : m_render_vertices) {
     point.thickness = thickness;
   }
+}
+
+const std::vector<glm::vec2> &Stroke::get_raw_points() const {
+  return m_raw_points;
 }
 
 void Stroke::upload() {

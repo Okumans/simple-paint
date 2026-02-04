@@ -72,24 +72,21 @@ void PaintApp::render(double delta_time) {
   process_input();
   update_camera(delta_time);
 
-  m_grid_shader.use();
-  m_grid_shader.setMat4("u_projection", m_app_state.projection);
-
   // Create a model matrix that covers the current visible world area
-  float aspect = m_app_state.get_aspect();
-  float z = m_app_state.zoom;
-
   glm::mat4 gridModel = glm::mat4(1.0f);
   gridModel = glm::translate(gridModel, glm::vec3(m_app_state.view_pos, -0.9f));
-  gridModel =
-      glm::scale(gridModel, glm::vec3(aspect * z * 2.0f, z * 2.0f, 1.0f));
+  gridModel = glm::scale(
+      gridModel, glm::vec3(m_app_state.get_aspect() * m_app_state.zoom * 2.0f,
+                           m_app_state.zoom * 2.0f, 1.0f));
   // Center the quad
   gridModel = glm::translate(gridModel, glm::vec3(-0.5f, -0.5f, 0.0f));
 
+  m_grid_shader.use();
+  m_grid_shader.setMat4("u_projection", m_app_state.projection);
   m_grid_shader.setMat4("u_model", gridModel);
   m_grid_shader.setFloat("u_zoom", m_app_state.zoom);
 
-  draw_quad(); // Reuse your UI quad helper
+  draw_quad();
 
   m_stroke_shader.use();
   m_stroke_shader.setMat4("u_projection", m_app_state.projection);
@@ -111,18 +108,33 @@ void PaintApp::render(double delta_time) {
     m_ui_shader.use();
     m_ui_shader.setMat4("u_projection", m_app_state.projection);
 
-    // Transformation Matrix: Translate to mouse -> Scale to brush radius
-    glm::mat4 model = glm::mat4(1.0f);
-    model = glm::translate(model, glm::vec3(world_pos, 0.0f));
     float radius = m_app_state.current_thickness * 0.5f;
-    model = glm::scale(model, glm::vec3(radius, radius, 1.0f));
 
-    m_ui_shader.setMat4("u_model", model);
+    // Translate to mouse -> Scale to brush radius
+    glm::mat4 model = glm::mat4(1.0f);
+
+    glm::mat4 preview_model = glm::translate(model, glm::vec3(world_pos, 0.0f));
+    preview_model = glm::scale(preview_model, glm::vec3(radius, radius, 1.0f));
+
     m_ui_shader.setVec3("u_color", m_app_state.current_color);
     m_ui_shader.setBool("u_hasTexture", false);
     m_ui_shader.setFloat("u_alpha", 0.4f);
 
     glBindVertexArray(m_preview_vao);
+
+    // Draw first of dynamic stroke model
+    if (!m_current_stroke.is_empty()) {
+      glm::mat4 start_dynamic_stroke_model = glm::translate(
+          model, glm::vec3(m_current_stroke.get_raw_points().front(), 0.0f));
+      start_dynamic_stroke_model = glm::scale(start_dynamic_stroke_model,
+                                              glm::vec3(radius, radius, 1.0f));
+
+      m_ui_shader.setMat4("u_model", start_dynamic_stroke_model);
+      glDrawArrays(GL_TRIANGLE_FAN, 0, PREVIEW_SEGMENTS + 2);
+    }
+
+    // Draw preview model
+    m_ui_shader.setMat4("u_model", preview_model);
     glDrawArrays(GL_TRIANGLE_FAN, 0, PREVIEW_SEGMENTS + 2);
   }
 
@@ -221,16 +233,16 @@ void PaintApp::handle_key_event(int key, int action, int mods) {
 
     bool ctrl_down = (mods & GLFW_MOD_CONTROL);
 
-    // Undo: Ctrl + Z
-    if (ctrl_down && key == GLFW_KEY_Z) {
+    // Undo: Ctrl + Z or U
+    if ((ctrl_down && key == GLFW_KEY_Z) || key == GLFW_KEY_U) {
       if (!m_strokes.empty()) {
         m_strokes_revert.push_back(std::move(m_strokes.back()));
         m_strokes.pop_back();
       }
     }
 
-    // Redo: Ctrl + R
-    if (ctrl_down && key == GLFW_KEY_R) {
+    // Redo: Ctrl + Y or Ctrl + R
+    if (ctrl_down && (key == GLFW_KEY_R || key == GLFW_KEY_Y)) {
       if (!m_strokes_revert.empty()) {
         m_strokes.push_back(std::move(m_strokes_revert.back()));
         m_strokes_revert.pop_back();

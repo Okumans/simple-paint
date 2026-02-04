@@ -35,6 +35,7 @@ public:
 
   void set_color(glm::vec3 color);
   void set_thickness(double thickness);
+  const std::vector<glm::vec2> &get_raw_points() const;
   void add_point(float x, float y);
   void clear();
   bool is_empty() const;
