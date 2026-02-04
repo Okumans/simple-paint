@@ -7,28 +7,38 @@
 
 // UIElement Constructors
 UIElement::UIElement(std::string name, UIHitbox box, glm::vec3 color,
-                     std::function<void()> cb)
+                     std::function<void(UIElement *)> cb)
     : name(std::move(name)), hitbox(box), onClick(std::move(cb)), color(color),
       hasTexture(false) {}
 
 UIElement::UIElement(std::string name, UIHitbox box, GLuint texID,
-                     std::function<void()> cb)
+                     std::function<void(UIElement *)> cb)
     : name(std::move(name)), hitbox(box), onClick(std::move(cb)),
       textureID(texID), hasTexture(true) {}
 
 // UIManager Implementations
 void UIManager::add_element(std::string name, UIHitbox box, glm::vec3 color,
-                            std::function<void()> cb) {
+                            std::function<void(UIElement *)> cb) {
   auto el =
       std::make_unique<UIElement>(std::move(name), box, color, std::move(cb));
   m_elements.emplace(box, std::move(el));
 }
 
 void UIManager::add_element(std::string name, UIHitbox box, GLuint texID,
-                            std::function<void()> cb) {
+                            std::function<void(UIElement *)> cb) {
   auto el =
       std::make_unique<UIElement>(std::move(name), box, texID, std::move(cb));
   m_elements.emplace(box, std::move(el));
+}
+
+UIElement *UIManager::get_element(const std::string &name) const {
+  for (auto &[_, element] : m_elements) {
+    if (element->name == name) {
+      return element.get();
+    }
+  }
+
+  return nullptr;
 }
 
 bool UIManager::handle_click(double mouseX, double mouseY) {
@@ -45,7 +55,7 @@ bool UIManager::handle_click(double mouseX, double mouseY) {
       break;
 
     if (box.contains(mouseX, mouseY)) {
-      it->second->onClick();
+      it->second->onClick(it->second.get());
       return true;
     }
   }
@@ -73,13 +83,12 @@ void UIManager::render(const Shader &uiShader, int windowWidth,
     model = glm::scale(model, glm::vec3(box.w, box.h, 1.0f));
     uiShader.setMat4("u_model", model);
 
+    uiShader.setVec3("u_color", el->color);
     uiShader.setBool("u_hasTexture", el->hasTexture);
     if (el->hasTexture) {
       glActiveTexture(GL_TEXTURE0);
       glBindTexture(GL_TEXTURE_2D, el->textureID);
       uiShader.setInt("u_icon", 0);
-    } else {
-      uiShader.setVec3("u_color", el->color);
     }
 
     draw_quad();

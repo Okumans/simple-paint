@@ -14,6 +14,10 @@
 #define SHADER_PATH ASSETS_PATH "/shaders"
 #endif
 
+#ifndef ICONS_PATH
+#define ICONS_PATH ASSETS_PATH "/icons"
+#endif
+
 struct InputState {
   glm::dvec2 curr_pos;
   glm::dvec2 prev_pos;
@@ -43,6 +47,8 @@ struct AppState {
   // --- Interaction State ---
   bool is_drawing = false;
   bool is_panning = false;
+
+  bool is_eraser = false;
 
   // --- Viewport ---
   int window_width = 800;
@@ -76,6 +82,8 @@ private:
   GLuint m_stroke_vao;
   GLuint m_preview_vao, m_preview_vbo;
   GLuint m_grid_vao, m_grid_vbo;
+
+  GLuint m_eraser_tex, m_pen_tex;
 
   UIManager m_ui_manager;
 

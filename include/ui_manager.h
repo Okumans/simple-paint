@@ -27,16 +27,16 @@ class UIElement {
 public:
   std::string name;
   UIHitbox hitbox;
-  std::function<void()> onClick;
+  std::function<void(UIElement *)> onClick;
 
   GLuint textureID = 0;
   glm::vec3 color = {1.0f, 1.0f, 1.0f};
   bool hasTexture = false;
 
   UIElement(std::string name, UIHitbox box, glm::vec3 color,
-            std::function<void()> cb);
+            std::function<void(UIElement *)> cb);
   UIElement(std::string name, UIHitbox box, GLuint texID,
-            std::function<void()> cb);
+            std::function<void(UIElement *)> cb);
 };
 
 class UIManager {
@@ -45,9 +45,11 @@ private:
 
 public:
   void add_element(std::string name, UIHitbox box, glm::vec3 color,
-                   std::function<void()> cb);
+                   std::function<void(UIElement *)> cb);
   void add_element(std::string name, UIHitbox box, GLuint texID,
-                   std::function<void()> cb);
+                   std::function<void(UIElement *)> cb);
+
+  UIElement *get_element(const std::string &name) const;
 
   bool handle_click(double mouseX, double mouseY);
 

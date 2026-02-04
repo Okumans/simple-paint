@@ -8,7 +8,47 @@
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/matrix.hpp>
+#include <iostream>
 #include <vector>
+
+#define STB_IMAGE_IMPLEMENTATION
+#include "external/stb_image.h"
+
+GLuint load_texture(const char *path) {
+  GLuint textureID;
+  glGenTextures(1, &textureID);
+
+  int width, height, nrComponents;
+  stbi_set_flip_vertically_on_load(true);
+  unsigned char *data = stbi_load(path, &width, &height, &nrComponents, 0);
+  if (data) {
+    GLenum format;
+    if (nrComponents == 1)
+      format = GL_RED;
+    else if (nrComponents == 3)
+      format = GL_RGB;
+    else if (nrComponents == 4)
+      format = GL_RGBA;
+
+    glBindTexture(GL_TEXTURE_2D, textureID);
+    glTexImage2D(GL_TEXTURE_2D, 0, format, width, height, 0, format,
+                 GL_UNSIGNED_BYTE, data);
+    glGenerateMipmap(GL_TEXTURE_2D);
+
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_S, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_WRAP_T, GL_REPEAT);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER,
+                    GL_LINEAR_MIPMAP_LINEAR);
+    glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_LINEAR);
+
+    stbi_image_free(data);
+  } else {
+    std::cout << "Texture failed to load at path: " << path << std::endl;
+    stbi_image_free(data);
+  }
+
+  return textureID;
+}
 
 PaintApp::PaintApp(GLFWwindow *window)
     : m_window(window), m_stroke_shader(Shader(STROKE_VERTEX_SHADER_PATH,
@@ -54,10 +94,27 @@ PaintApp::PaintApp(GLFWwindow *window)
       glm::vec3 color = palette[i];
       std::string name = "Color_" + std::to_string(i);
 
-      m_ui_manager.add_element(name, {x, y, BOX_SIZE, BOX_SIZE}, color,
-                               [this, color]() { this->set_color(color); });
+      m_ui_manager.add_element(
+          name, {x, y, BOX_SIZE, BOX_SIZE}, color,
+          [this, color](auto _) { this->set_color(color); });
     }
   }
+
+  // Set up eraser
+  m_eraser_tex = load_texture(ICONS_PATH "/eraser.png");
+  m_pen_tex = load_texture(ICONS_PATH "/pen.png");
+
+  m_ui_manager.add_element("current_tool", {374.0f, 10.0f, 40.0f, 40.0f},
+                           m_pen_tex, [this](UIElement *self) {
+                             this->m_app_state.is_eraser =
+                                 !this->m_app_state.is_eraser;
+
+                             if (this->m_app_state.is_eraser) {
+                               self->textureID = m_eraser_tex;
+                             } else {
+                               self->textureID = m_pen_tex;
+                             }
+                           });
 }
 
 void setup_brush_preview(GLuint &preview_vao, GLuint preview_vbo);
@@ -148,7 +205,13 @@ void PaintApp::render(double delta_time) {
 
     // Draw preview model
     m_ui_shader.setMat4("u_model", preview_model);
-    glDrawArrays(GL_TRIANGLE_FAN, 0, PREVIEW_SEGMENTS + 2);
+
+    if (m_app_state.is_eraser) {
+      m_ui_shader.setVec3("u_color", glm::vec3(1.0f, 1.0f, 1.0f)); // White ring
+      glDrawArrays(GL_LINE_LOOP, 1, PREVIEW_SEGMENTS);
+    } else {
+      glDrawArrays(GL_TRIANGLE_FAN, 0, PREVIEW_SEGMENTS + 2);
+    }
   }
 
   m_ui_manager.render(m_ui_shader, m_app_state.window_width,
@@ -277,17 +340,17 @@ void PaintApp::handle_key_event(int key, int action, int mods) {
 }
 
 void PaintApp::handle_mouse_click(int button, int action) {
-  if (m_ui_manager.handle_click(m_input_state.curr_pos.x,
-                                m_input_state.curr_pos.y)) {
-    m_input_state.is_pressed = true;
-    return;
-  }
-  // IGNORE UI MANAGER FOR NOW
-
   if (button == GLFW_MOUSE_BUTTON_LEFT) {
     if (action == GLFW_PRESS) {
       m_input_state.is_pressed = true;
+
+      if (m_ui_manager.handle_click(m_input_state.curr_pos.x,
+                                    m_input_state.curr_pos.y)) {
+        return;
+      }
+
       start_drawing();
+
     } else if (action == GLFW_RELEASE) {
       m_input_state.is_pressed = false;
       end_drawing();
@@ -490,6 +553,9 @@ PaintApp::~PaintApp() {
 
   glDeleteVertexArrays(1, &m_grid_vao);
   glDeleteBuffers(1, &m_grid_vbo);
+
+  glDeleteTextures(1, &m_eraser_tex);
+  glDeleteTextures(1, &m_pen_tex);
 
   glDeleteProgram(m_stroke_shader.ID);
   glDeleteProgram(m_ui_shader.ID);
