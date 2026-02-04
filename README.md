@@ -2,6 +2,11 @@
 
 Simple Paint is a high-performance, infinite canvas painting application built with C++ and OpenGL 4.5. It features a stroke-based rendering engine, a custom UI system with spatial optimization, and a robust input handling architecture.
 
+
+## preview
+https://github.com/user-attachments/assets/ac960c0e-51f1-462b-9d38-22b321db9a21
+
+
 ## Features
 
 *   **Infinite Canvas:** Pan and zoom freely without boundaries.
