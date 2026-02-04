@@ -67,7 +67,8 @@ PaintApp::PaintApp(GLFWwindow *window)
   glfwSetScrollCallback(m_window, PaintApp::glfw_scroll_callback);
 
   glEnable(GL_BLEND);
-  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE,
+                      GL_ONE_MINUS_SRC_ALPHA);
 
   // Set up color picker
   {
@@ -95,8 +96,15 @@ PaintApp::PaintApp(GLFWwindow *window)
       std::string name = "Color_" + std::to_string(i);
 
       m_ui_manager.add_element(
-          name, {x, y, BOX_SIZE, BOX_SIZE}, color,
-          [this, color](auto _) { this->set_color(color); });
+          name, {x, y, BOX_SIZE, BOX_SIZE}, color, [this, color](auto _) {
+            this->set_color(color);
+
+            if (m_app_state.is_eraser) {
+              this->m_app_state.is_eraser = false;
+              this->m_ui_manager.get_element("current_tool")->textureID =
+                  m_pen_tex;
+            }
+          });
     }
   }
 
@@ -117,7 +125,7 @@ PaintApp::PaintApp(GLFWwindow *window)
                            });
 }
 
-void setup_brush_preview(GLuint &preview_vao, GLuint preview_vbo);
+void setup_brush_preview(GLuint &preview_vao, GLuint &preview_vbo);
 void setup_stroke(GLuint &preview_vao);
 
 void PaintApp::setup_buffers() {
@@ -129,32 +137,14 @@ void PaintApp::render(double delta_time) {
   process_input();
   update_camera(delta_time);
 
-  // Create a model matrix that covers the current visible world area
-  glm::mat4 gridModel = glm::mat4(1.0f);
-  gridModel = glm::translate(gridModel, glm::vec3(m_app_state.view_pos, -0.9f));
-  gridModel = glm::scale(
-      gridModel, glm::vec3(m_app_state.get_aspect() * m_app_state.zoom * 2.0f,
-                           m_app_state.zoom * 2.0f, 1.0f));
-  // Center the quad
-  gridModel = glm::translate(gridModel, glm::vec3(-0.5f, -0.5f, 0.0f));
-
-  m_grid_shader.use();
-  m_grid_shader.setMat4("u_projection", m_app_state.projection);
-  m_grid_shader.setMat4("u_model", gridModel);
-  m_grid_shader.setFloat("u_zoom", m_app_state.zoom);
-
-  draw_quad();
-
+  // --- STROKE RENDERING ---
   m_stroke_shader.use();
-
   glBindVertexArray(m_stroke_vao);
   m_stroke_shader.setMat4("u_projection", m_app_state.projection);
 
-  // Calculate Camera AABB for Culling
   double aspect_zoom =
       static_cast<double>(m_app_state.get_aspect()) * m_app_state.zoom;
   double zoom = static_cast<double>(m_app_state.zoom);
-
   AABB camera_bounds;
   camera_bounds.min = {m_app_state.view_pos.x - aspect_zoom,
                        m_app_state.view_pos.y - zoom};
@@ -162,58 +152,83 @@ void PaintApp::render(double delta_time) {
                        m_app_state.view_pos.y + zoom};
 
   for (auto &stroke : m_strokes) {
-    if (stroke.get_bounds().intersects(camera_bounds)) {
+    if (!stroke.get_bounds().intersects(camera_bounds))
+      continue;
+
+    if (stroke.is_eraser()) {
+      glBlendFuncSeparate(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO,
+                          GL_ONE_MINUS_SRC_ALPHA);
+    } else {
+      glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE,
+                          GL_ONE_MINUS_SRC_ALPHA);
+    }
+
+    if (stroke.get_raw_points().size() == 1) {
+      draw_dot(m_preview_vao, stroke.get_raw_points().front(),
+               stroke.get_thickness() / 2.0f, stroke.get_color(), 1.0f);
+    } else {
+      m_stroke_shader.use();
+      m_stroke_shader.setMat4("u_projection", m_app_state.projection);
+      glBindVertexArray(m_stroke_vao);
       stroke.draw(m_stroke_vao, m_stroke_shader);
     }
   }
 
+  // --- CURRENT STROKE + START CAP ---
   if (!m_current_stroke.is_empty()) {
+    if (m_current_stroke.is_eraser()) {
+      glBlendFuncSeparate(GL_ZERO, GL_ONE_MINUS_SRC_ALPHA, GL_ZERO,
+                          GL_ONE_MINUS_SRC_ALPHA);
+    } else {
+      glBlendFuncSeparate(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_ONE,
+                          GL_ONE_MINUS_SRC_ALPHA);
+    }
+
+    // Draw the "Live" Start Cap
+    draw_dot(m_preview_vao, m_current_stroke.get_raw_points().front(),
+             m_app_state.current_thickness / 2.0f, m_app_state.current_color,
+             1.0f);
+
+    // Draw the actual line
+    m_stroke_shader.use(); // Ensure stroke shader is active for the ribbon
+    m_stroke_shader.setMat4("u_projection", m_app_state.projection);
+    glBindVertexArray(m_stroke_vao);
     m_current_stroke.draw(m_stroke_vao, m_stroke_shader);
   }
 
-  if (true) {
-    glm::dvec2 world_pos = screen_to_world(
-        m_app_state, m_input_state.curr_pos.x, m_input_state.curr_pos.y);
+  // --- MOUSE PREVIEW ---
+  // Reset to standard Alpha blending for the UI/Cursor
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glm::dvec2 world_pos = screen_to_world(m_app_state, m_input_state.curr_pos.x,
+                                         m_input_state.curr_pos.y);
 
-    m_ui_shader.use();
-    m_ui_shader.setMat4("u_projection", m_app_state.projection);
-
-    float radius = m_app_state.current_thickness * 0.5f;
-
-    // Translate to mouse -> Scale to brush radius
-    glm::mat4 model = glm::mat4(1.0f);
-
-    glm::mat4 preview_model = glm::translate(model, glm::vec3(world_pos, 0.0f));
-    preview_model = glm::scale(preview_model, glm::vec3(radius, radius, 1.0f));
-
-    m_ui_shader.setVec3("u_color", m_app_state.current_color);
-    m_ui_shader.setBool("u_hasTexture", false);
-    m_ui_shader.setFloat("u_alpha", 0.4f);
-
-    glBindVertexArray(m_preview_vao);
-
-    // Draw first of dynamic stroke model
-    if (!m_current_stroke.is_empty()) {
-      glm::mat4 start_dynamic_stroke_model = glm::translate(
-          model, glm::vec3(m_current_stroke.get_raw_points().front(), 0.0f));
-      start_dynamic_stroke_model = glm::scale(start_dynamic_stroke_model,
-                                              glm::vec3(radius, radius, 1.0f));
-
-      m_ui_shader.setMat4("u_model", start_dynamic_stroke_model);
-      glDrawArrays(GL_TRIANGLE_FAN, 0, PREVIEW_SEGMENTS + 2);
-    }
-
-    // Draw preview model
-    m_ui_shader.setMat4("u_model", preview_model);
-
-    if (m_app_state.is_eraser) {
-      m_ui_shader.setVec3("u_color", glm::vec3(1.0f, 1.0f, 1.0f)); // White ring
-      glDrawArrays(GL_LINE_LOOP, 1, PREVIEW_SEGMENTS);
-    } else {
-      glDrawArrays(GL_TRIANGLE_FAN, 0, PREVIEW_SEGMENTS + 2);
-    }
+  if (m_app_state.is_eraser) {
+    // White Ring for Eraser
+    draw_dot(m_preview_vao, world_pos, m_app_state.current_thickness / 2.0f,
+             {1.0f, 1.0f, 1.0f}, 0.6f, GL_LINE_LOOP);
+  } else {
+    // Solid colored dot for Pen
+    draw_dot(m_preview_vao, world_pos, m_app_state.current_thickness / 2.0f,
+             m_app_state.current_color, 0.4f, GL_TRIANGLE_FAN);
   }
 
+  // --- GRID ---
+  glBlendFunc(GL_ONE_MINUS_DST_ALPHA, GL_ONE);
+  glm::mat4 gridModel =
+      glm::translate(glm::mat4(1.0f), glm::vec3(m_app_state.view_pos, -0.9f));
+  gridModel = glm::scale(
+      gridModel, glm::vec3(m_app_state.get_aspect() * m_app_state.zoom * 2.0f,
+                           m_app_state.zoom * 2.0f, 1.0f));
+  gridModel = glm::translate(gridModel, glm::vec3(-0.5f, -0.5f, 0.0f));
+
+  m_grid_shader.use();
+  m_grid_shader.setMat4("u_projection", m_app_state.projection);
+  m_grid_shader.setMat4("u_model", gridModel);
+  m_grid_shader.setFloat("u_zoom", m_app_state.zoom);
+  draw_quad();
+
+  // --- UI ---
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
   m_ui_manager.render(m_ui_shader, m_app_state.window_width,
                       m_app_state.window_height);
 }
@@ -221,6 +236,16 @@ void PaintApp::render(double delta_time) {
 void PaintApp::start_drawing() {
   m_app_state.is_drawing = true;
   m_strokes_revert.clear();
+
+  m_current_stroke =
+      Stroke(m_app_state.current_color, m_app_state.current_thickness,
+             m_app_state.is_eraser);
+
+  glm::dvec2 world_pos = screen_to_world(m_app_state, m_input_state.curr_pos.x,
+                                         m_input_state.curr_pos.y);
+
+  m_current_stroke.add_point(world_pos.x, world_pos.y);
+  m_current_stroke.upload();
 }
 
 void PaintApp::on_drawing(double x, double y) {
@@ -233,12 +258,16 @@ void PaintApp::on_drawing(double x, double y) {
 void PaintApp::end_drawing() {
   m_app_state.is_drawing = false;
   if (!m_current_stroke.is_empty()) {
-    m_current_stroke.update_geometry();
-    m_current_stroke.upload();
+    if (m_current_stroke.get_raw_points().size() > 1) {
+      m_current_stroke.update_geometry();
+      m_current_stroke.upload();
+    }
+
     m_strokes.push_back(std::move(m_current_stroke));
-    m_current_stroke =
-        Stroke(m_app_state.current_color, m_app_state.current_thickness);
   }
+  m_current_stroke =
+      Stroke(m_app_state.current_color, m_app_state.current_thickness,
+             m_app_state.is_eraser);
 }
 
 // Paint app internal handlers
@@ -336,6 +365,14 @@ void PaintApp::handle_key_event(int key, int action, int mods) {
     if (ctrl_down && key == GLFW_KEY_MINUS) {
       set_thickness(m_app_state.current_thickness * 0.8f);
     }
+
+    if (key == GLFW_KEY_E) {
+      m_app_state.is_eraser = !m_app_state.is_eraser;
+      UIElement *tool_el = m_ui_manager.get_element("current_tool");
+      if (tool_el) {
+        tool_el->textureID = m_app_state.is_eraser ? m_eraser_tex : m_pen_tex;
+      }
+    }
   }
 }
 
@@ -422,6 +459,31 @@ void PaintApp::set_thickness(float thickness) {
   m_current_stroke.set_thickness(thickness);
 }
 
+void PaintApp::draw_dot(GLuint &vao, const glm::vec2 &world_pos, float radius,
+                        const glm::vec3 &color, float alpha,
+                        int draw_mode) const {
+  // 1. Prepare Transformation
+  glm::mat4 model = glm::translate(glm::mat4(1.0f), glm::vec3(world_pos, 0.0f));
+  model = glm::scale(model, glm::vec3(radius, radius, 1.0f));
+
+  // 2. Setup Shader State
+  m_ui_shader.use();
+  m_ui_shader.setMat4("u_projection", m_app_state.projection);
+  m_ui_shader.setMat4("u_model", model);
+  m_ui_shader.setVec3("u_color", color);
+  m_ui_shader.setFloat("u_alpha", alpha);
+  m_ui_shader.setBool("u_hasTexture", false);
+
+  // 3. Draw
+  glBindVertexArray(vao);
+  if (draw_mode == GL_LINE_LOOP) {
+    // Skip index 0 (center) to avoid the "spoke" line
+    glDrawArrays(GL_LINE_LOOP, 1, 32);
+  } else {
+    glDrawArrays(GL_TRIANGLE_FAN, 0, 32 + 2);
+  }
+}
+
 glm::dvec2 PaintApp::screen_to_world(const AppState &state, double xpos,
                                      double ypos) {
   float nx = (2.0f * (float)xpos) / state.window_width - 1.0f;
@@ -481,13 +543,14 @@ void setup_stroke(GLuint &stroke_vao) {
   glVertexArrayAttribBinding(stroke_vao, 4, 0);
 }
 
-void setup_brush_preview(GLuint &preview_vao, GLuint preview_vbo) {
-  // Create a simple circle with 32 segments
+void setup_brush_preview(GLuint &preview_vao, GLuint &preview_vbo) {
+  const int segments = 32;
   std::vector<float> vertices;
+
+  // Center point for GL_TRIANGLE_FAN
   vertices.push_back(0.0f);
   vertices.push_back(0.0f);
 
-  int segments = 32;
   for (int i = 0; i <= segments; ++i) {
     float angle = i * 2.0f * glm::pi<float>() / segments;
     vertices.push_back(cos(angle));

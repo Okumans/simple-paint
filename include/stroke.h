@@ -15,10 +15,11 @@ private:
   double m_cummulative_distance;
   double m_thickness;
   AABB m_bounds;
+  bool m_is_eraser = false;
 
 public:
   Stroke();
-  Stroke(glm::vec3 color, double thickness);
+  Stroke(glm::vec3 color, double thickness, bool is_eraser = false);
   ~Stroke();
 
   // Disable Copying (prevents double-free of VBO)
@@ -30,12 +31,18 @@ public:
   Stroke &operator=(Stroke &&other) noexcept;
 
   void upload() override;
-  void draw(GLuint vao, const Shader &shader) const override;
+  void draw(GLuint &vao, const Shader &shader) const override;
   void update_geometry() override;
   const AABB &get_bounds() const { return m_bounds; }
 
   void set_color(glm::vec3 color);
   void set_thickness(double thickness);
+  void set_eraser(bool is_eraser) { m_is_eraser = is_eraser; }
+
+  bool is_eraser() const { return m_is_eraser; }
+  glm::vec3 get_color() const;
+  double get_thickness() const;
+
   const std::vector<glm::dvec2> &get_raw_points() const;
   void add_point(double x, double y);
   void clear();

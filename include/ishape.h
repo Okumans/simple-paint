@@ -14,7 +14,7 @@ public:
   virtual void upload() = 0;
 
   // Rendering: Needs to know which VAO/Shader to use
-  virtual void draw(GLuint vao, const Shader &shader) const = 0;
+  virtual void draw(GLuint &vao, const Shader &shader) const = 0;
 
   // Selection/Modification logic
   // virtual bool contains_point(float x, float y) const = 0;

@@ -129,10 +129,12 @@ private:
   // Helper method
   void set_color(glm::vec3 color);
   void set_thickness(float thickness);
-
   void update_camera(double delta_time);
   void update_projection();
   static glm::dvec2 screen_to_world(const AppState &state, double x, double yh);
+  void draw_dot(GLuint &vao, const glm::vec2 &world_pos, float radius,
+                const glm::vec3 &color, float alpha,
+                int draw_mode = GL_TRIANGLE_FAN) const;
 
   void setup_buffers();
 };

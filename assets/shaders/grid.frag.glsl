@@ -15,5 +15,6 @@ void main() {
 
   if (mask < 0.1) discard;
 
-  FragColor = vec4(u_gridColor, mask * 0.5);
+  vec3 finalColor = u_gridColor * mask * 0.5;
+  FragColor = vec4(finalColor, 1.0);
 }

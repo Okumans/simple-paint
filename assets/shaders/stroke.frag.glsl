@@ -23,7 +23,9 @@ void main() {
 
   float dist = sqrt(dx * dx + dy * dy);
 
-  float alpha = 1.0 - smoothstep(radius - fwidth(dist), radius, dist);
+  // Soft anti-aliased edges
+  float edge_softness = fwidth(dist);
+  float alpha = 1.0 - smoothstep(radius - edge_softness, radius, dist);
 
   if (alpha <= 0.0) discard;
 
