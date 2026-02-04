@@ -484,5 +484,14 @@ void PaintApp::glfw_mouse_button_callback(GLFWwindow *window, int button,
 
 PaintApp::~PaintApp() {
   glDeleteVertexArrays(1, &m_stroke_vao);
+
+  glDeleteVertexArrays(1, &m_preview_vao);
+  glDeleteBuffers(1, &m_preview_vbo);
+
+  glDeleteVertexArrays(1, &m_grid_vao);
+  glDeleteBuffers(1, &m_grid_vbo);
+
   glDeleteProgram(m_stroke_shader.ID);
+  glDeleteProgram(m_ui_shader.ID);
+  glDeleteProgram(m_grid_shader.ID);
 }

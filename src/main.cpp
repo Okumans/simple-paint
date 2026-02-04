@@ -54,24 +54,28 @@ GLFWwindow *initialize_window(int width, int height, const char *title) {
 
 int main() {
   GLFWwindow *window = initialize_window(800, 600, "Simple Paint");
-  PaintApp app(window);
 
-  double prev_time = glfwGetTime();
+  // Forcing paint app destructor with scope
+  {
+    PaintApp app(window);
 
-  while (!glfwWindowShouldClose(window)) {
-    double curr_time = glfwGetTime();
-    double delta_time = curr_time - prev_time;
-    prev_time = curr_time;
+    double prev_time = glfwGetTime();
 
-    process_input(window);
+    while (!glfwWindowShouldClose(window)) {
+      double curr_time = glfwGetTime();
+      double delta_time = curr_time - prev_time;
+      prev_time = curr_time;
 
-    glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
+      process_input(window);
 
-    app.render(delta_time);
+      glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
+      glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-    glfwSwapBuffers(window);
-    glfwPollEvents();
+      app.render(delta_time);
+
+      glfwSwapBuffers(window);
+      glfwPollEvents();
+    }
   }
 
   glfwDestroyWindow(window);
