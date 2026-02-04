@@ -15,12 +15,12 @@
 #endif
 
 struct InputState {
-  glm::vec2 curr_pos;
-  glm::vec2 prev_pos;
+  glm::dvec2 curr_pos;
+  glm::dvec2 prev_pos;
 
   bool is_pressed = false;
 
-  void update_pos(glm::vec2 new_pos) {
+  void update_pos(glm::dvec2 new_pos) {
     prev_pos = curr_pos;
     curr_pos = new_pos;
   }
@@ -28,8 +28,8 @@ struct InputState {
 
 struct AppState {
   // --- Canvas State ---
-  glm::vec2 target_view_pos = {0.0f, 0.0f};
-  glm::vec2 view_pos = {0.0f, 0.0f};
+  glm::dvec2 target_view_pos = {0.0f, 0.0f};
+  glm::dvec2 view_pos = {0.0f, 0.0f};
 
   float target_zoom = 1.0f;
   float zoom = 1.0f;
@@ -124,7 +124,7 @@ private:
 
   void update_camera(double delta_time);
   void update_projection();
-  static glm::vec2 screen_to_world(const AppState &state, double x, double yh);
+  static glm::dvec2 screen_to_world(const AppState &state, double x, double yh);
 
   void setup_buffers();
 };

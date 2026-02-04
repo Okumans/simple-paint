@@ -89,12 +89,25 @@ void PaintApp::render(double delta_time) {
   draw_quad();
 
   m_stroke_shader.use();
-  m_stroke_shader.setMat4("u_projection", m_app_state.projection);
 
   glBindVertexArray(m_stroke_vao);
+  m_stroke_shader.setMat4("u_projection", m_app_state.projection);
+
+  // Calculate Camera AABB for Culling
+  double aspect_zoom =
+      static_cast<double>(m_app_state.get_aspect()) * m_app_state.zoom;
+  double zoom = static_cast<double>(m_app_state.zoom);
+
+  AABB camera_bounds;
+  camera_bounds.min = {m_app_state.view_pos.x - aspect_zoom,
+                       m_app_state.view_pos.y - zoom};
+  camera_bounds.max = {m_app_state.view_pos.x + aspect_zoom,
+                       m_app_state.view_pos.y + zoom};
 
   for (auto &stroke : m_strokes) {
-    stroke.draw(m_stroke_vao, m_stroke_shader);
+    if (stroke.get_bounds().intersects(camera_bounds)) {
+      stroke.draw(m_stroke_vao, m_stroke_shader);
+    }
   }
 
   if (!m_current_stroke.is_empty()) {
@@ -102,8 +115,8 @@ void PaintApp::render(double delta_time) {
   }
 
   if (true) {
-    glm::vec2 world_pos = screen_to_world(m_app_state, m_input_state.curr_pos.x,
-                                          m_input_state.curr_pos.y);
+    glm::dvec2 world_pos = screen_to_world(
+        m_app_state, m_input_state.curr_pos.x, m_input_state.curr_pos.y);
 
     m_ui_shader.use();
     m_ui_shader.setMat4("u_projection", m_app_state.projection);
@@ -148,7 +161,7 @@ void PaintApp::start_drawing() {
 }
 
 void PaintApp::on_drawing(double x, double y) {
-  glm::vec2 world_pos = screen_to_world(m_app_state, x, y);
+  glm::dvec2 world_pos = screen_to_world(m_app_state, x, y);
 
   m_current_stroke.add_point(world_pos.x, world_pos.y);
   m_current_stroke.upload();
@@ -195,7 +208,7 @@ void PaintApp::handle_scroll(double xoffset, double yoffset) {
     double x, y;
     glfwGetCursorPos(m_window, &x, &y);
 
-    glm::vec2 mouse_world_before = screen_to_world(m_app_state, x, y);
+    glm::dvec2 mouse_world_before = screen_to_world(m_app_state, x, y);
 
     // Set new zoom target
     if (yoffset > 0)
@@ -212,15 +225,19 @@ void PaintApp::handle_scroll(double xoffset, double yoffset) {
     float ny = 1.0f - (2.0f * (float)y) / m_app_state.window_height;
 
     m_app_state.target_view_pos.x =
-        mouse_world_before.x -
-        (nx * m_app_state.get_aspect() * m_app_state.target_zoom);
+        mouse_world_before.x - (static_cast<double>(nx) *
+                                static_cast<double>(m_app_state.get_aspect()) *
+                                static_cast<double>(m_app_state.target_zoom));
     m_app_state.target_view_pos.y =
-        mouse_world_before.y - (ny * m_app_state.target_zoom);
+        mouse_world_before.y - (static_cast<double>(ny) *
+                                static_cast<double>(m_app_state.target_zoom));
   } else {
     // Touchpad Panning
     float pan_speed = 0.05f * m_app_state.target_zoom;
-    m_app_state.target_view_pos.x -= static_cast<float>(xoffset) * pan_speed;
-    m_app_state.target_view_pos.y += static_cast<float>(yoffset) * pan_speed;
+    m_app_state.target_view_pos.x -=
+        static_cast<double>(xoffset) * static_cast<double>(pan_speed);
+    m_app_state.target_view_pos.y +=
+        static_cast<double>(yoffset) * static_cast<double>(pan_speed);
   }
 }
 
@@ -302,13 +319,16 @@ void PaintApp::process_input() {
       m_app_state.is_drawing = false;
     }
 
-    glm::vec2 delta = m_input_state.curr_pos - m_input_state.prev_pos;
+    glm::dvec2 delta = m_input_state.curr_pos - m_input_state.prev_pos;
     float aspect = m_app_state.get_aspect();
 
-    m_app_state.target_view_pos.x -= (delta.x / m_app_state.window_width) *
-                                     2.0f * aspect * m_app_state.target_zoom;
+    m_app_state.target_view_pos.x -=
+        (delta.x / static_cast<double>(m_app_state.window_width)) * 2.0 *
+        static_cast<double>(aspect) *
+        static_cast<double>(m_app_state.target_zoom);
     m_app_state.target_view_pos.y +=
-        (delta.y / m_app_state.window_height) * 2.0f * m_app_state.target_zoom;
+        (delta.y / static_cast<double>(m_app_state.window_height)) * 2.0 *
+        static_cast<double>(m_app_state.target_zoom);
   }
 }
 
@@ -339,8 +359,8 @@ void PaintApp::set_thickness(float thickness) {
   m_current_stroke.set_thickness(thickness);
 }
 
-glm::vec2 PaintApp::screen_to_world(const AppState &state, double xpos,
-                                    double ypos) {
+glm::dvec2 PaintApp::screen_to_world(const AppState &state, double xpos,
+                                     double ypos) {
   float nx = (2.0f * (float)xpos) / state.window_width - 1.0f;
   float ny = 1.0f - (2.0f * (float)ypos) / state.window_height;
 
@@ -348,7 +368,7 @@ glm::vec2 PaintApp::screen_to_world(const AppState &state, double xpos,
   glm::mat4 invProj = glm::inverse(state.projection);
   glm::vec4 worldPos = invProj * glm::vec4(nx, ny, 0.0f, 1.0f);
 
-  return glm::vec2(worldPos);
+  return glm::dvec2(worldPos);
 }
 
 void PaintApp::update_projection() {

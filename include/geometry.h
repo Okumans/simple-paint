@@ -15,4 +15,14 @@ struct QuadVertex {
   glm::vec2 uv;
 };
 
+struct AABB {
+  glm::dvec2 min;
+  glm::dvec2 max;
+
+  bool intersects(const AABB &other) const {
+    return (min.x <= other.max.x && max.x >= other.min.x) &&
+           (min.y <= other.max.y && max.y >= other.min.y);
+  }
+};
+
 void draw_quad();
